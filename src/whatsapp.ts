@@ -51,6 +51,18 @@ loadPersistedContacts();
 let sock: WASocket | undefined;
 let state: ConnectionState = 'connecting';
 let latestQr: string | undefined;
+let connectPromise: Promise<void> | undefined;
+
+// Guards against overlapping connectToWhatsApp() calls (e.g. a reconnect
+// already in flight from a connection.update close event) racing to create
+// two live sockets. Safe to call from anywhere that just wants "make sure
+// we're (re)connecting" without caring whether one is already underway.
+function ensureConnecting(): void {
+  if (connectPromise) return;
+  connectPromise = connectToWhatsApp().finally(() => {
+    connectPromise = undefined;
+  });
+}
 
 function setState(next: ConnectionState) {
   if (state !== next) {
@@ -199,7 +211,7 @@ export async function connectToWhatsApp(): Promise<void> {
         log('[whatsapp] reconnecting...');
       }
       setState('connecting');
-      void connectToWhatsApp();
+      ensureConnecting();
     } else if (connection === 'open') {
       setState('connected');
       latestQr = undefined;
@@ -219,14 +231,18 @@ export async function logout(): Promise<void> {
     // sock.logout() needs a live websocket to ask WhatsApp's servers to
     // unlink the device — if we're mid-reconnect (state !== 'connected'),
     // it fails immediately with "Connection Closed" before ever reaching
-    // WhatsApp. Fall back to a local-only reset: force-close the socket
-    // with a `loggedOut` status so the existing connection.update handler
-    // clears the session and starts fresh (new QR), same as a real logout.
+    // WhatsApp. In that case the socket is already internally marked
+    // closed, so sock.end() is a silent no-op (Baileys short-circuits on
+    // its own `closed` flag) — it will NOT emit connection.update and
+    // nothing will clear the session or reconnect. So do that ourselves
+    // directly instead of routing through the socket's close event.
     // Note: the device won't be actively unlinked from the phone's Linked
     // Devices list in this case — it'll just go stale until WhatsApp times
     // it out on its own.
     log('[whatsapp] sock.logout() failed (likely no live connection), forcing local session reset:', err);
-    sock.end(new Boom('Local logout (no live connection)', { statusCode: DisconnectReason.loggedOut }));
+    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+    setState('connecting');
+    ensureConnecting();
   }
 }
 
