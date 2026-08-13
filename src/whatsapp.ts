@@ -64,6 +64,17 @@ function ensureConnecting(): void {
   });
 }
 
+// Clears everything inside AUTH_DIR (session creds, messages, contacts,
+// TLS cert) without removing AUTH_DIR itself — it's a Docker bind mount
+// point (see docker-compose.yml), and removing a mount point directory
+// fails with EBUSY even though clearing its contents is fine.
+function clearAuthDir(): void {
+  if (!fs.existsSync(AUTH_DIR)) return;
+  for (const entry of fs.readdirSync(AUTH_DIR)) {
+    fs.rmSync(path.join(AUTH_DIR, entry), { recursive: true, force: true });
+  }
+}
+
 function setState(next: ConnectionState) {
   if (state !== next) {
     log(`[whatsapp] state ${state} -> ${next}`);
@@ -206,7 +217,7 @@ export async function connectToWhatsApp(): Promise<void> {
 
       if (loggedOut) {
         log('[whatsapp] logged out. Clearing session, a new QR code will be generated.');
-        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        clearAuthDir();
       } else {
         log('[whatsapp] reconnecting...');
       }
@@ -240,7 +251,7 @@ export async function logout(): Promise<void> {
     // Devices list in this case — it'll just go stale until WhatsApp times
     // it out on its own.
     log('[whatsapp] sock.logout() failed (likely no live connection), forcing local session reset:', err);
-    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+    clearAuthDir();
     setState('connecting');
     ensureConnecting();
   }
