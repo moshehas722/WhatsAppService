@@ -212,8 +212,22 @@ export async function logout(): Promise<void> {
   if (!sock) {
     throw new Error('WhatsApp socket not initialized yet.');
   }
-  log('[whatsapp] logout requested');
-  await sock.logout();
+  log(`[whatsapp] logout requested (currentState=${state})`);
+  try {
+    await sock.logout();
+  } catch (err) {
+    // sock.logout() needs a live websocket to ask WhatsApp's servers to
+    // unlink the device — if we're mid-reconnect (state !== 'connected'),
+    // it fails immediately with "Connection Closed" before ever reaching
+    // WhatsApp. Fall back to a local-only reset: force-close the socket
+    // with a `loggedOut` status so the existing connection.update handler
+    // clears the session and starts fresh (new QR), same as a real logout.
+    // Note: the device won't be actively unlinked from the phone's Linked
+    // Devices list in this case — it'll just go stale until WhatsApp times
+    // it out on its own.
+    log('[whatsapp] sock.logout() failed (likely no live connection), forcing local session reset:', err);
+    sock.end(new Boom('Local logout (no live connection)', { statusCode: DisconnectReason.loggedOut }));
+  }
 }
 
 export function toJid(to: string): string {
