@@ -1,0 +1,17 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false # actions/checkout defaults to `git clean -ffdx`, which would wipe
+                       # auth_info/ (WhatsApp session + TLS cert) and .env since they're gitignored
+
+      - name: Build and restart
+        run: docker compose up -d --build

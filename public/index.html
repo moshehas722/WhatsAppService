@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WhatsApp Sender</title>
+<style>
+  :root {
+    --bg: #0b141a;
+    --panel: #111b21;
+    --panel-2: #182229;
+    --border: #26333a;
+    --text: #e9edef;
+    --muted: #8696a0;
+    --accent: #25d366;
+    --accent-dim: #1f9e56;
+    --danger: #f15c5c;
+    --bubble-in: #202c33;
+    --bubble-out: #005c4b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .app { display: flex; height: 100vh; }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    width: 340px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-header { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .brand { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+  .status-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.connected { background: var(--accent); }
+  .dot.qr_pending { background: #f0c419; }
+  .dot.connecting { background: var(--muted); }
+  .dot.disconnected { background: var(--danger); }
+  .state-label { text-transform: capitalize; }
+  .linklike {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+  }
+  .linklike:hover { color: var(--danger); }
+
+  #qrPanel { padding: 14px 16px; border-bottom: 1px solid var(--border); text-align: center; }
+  #qrImg { max-width: 100%; border-radius: 8px; background: #fff; padding: 8px; }
+  .qr-hint { color: var(--muted); font-size: 11px; margin-top: 8px; }
+
+  .new-chat-row { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .new-chat-row input {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 7px 9px;
+    font-size: 12px;
+  }
+  .new-chat-row button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .new-chat-row button:hover { background: var(--bubble-in); }
+
+  .convo-list { flex: 1; overflow-y: auto; }
+  .convo-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .convo-item:hover { background: var(--panel-2); }
+  .convo-item.active { background: var(--bubble-in); }
+  .convo-item .title { font-weight: 600; font-size: 13.5px; display: flex; justify-content: space-between; gap: 8px; }
+  .convo-item .title .count { color: var(--muted); font-weight: 400; font-size: 11px; flex-shrink: 0; }
+  .convo-item .preview {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sidebar-empty { color: var(--muted); font-size: 13px; text-align: center; margin-top: 40px; padding: 0 20px; }
+
+  /* ---------- Chat pane ---------- */
+  .chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .chat-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  .chat-title { font-weight: 700; font-size: 15px; }
+  .chat-subtitle { color: var(--muted); font-size: 11px; margin-top: 2px; word-break: break-all; }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--bg);
+  }
+  .bubble {
+    max-width: 60%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .bubble.in { background: var(--bubble-in); align-self: flex-start; border-bottom-left-radius: 2px; }
+  .bubble.out { background: var(--bubble-out); align-self: flex-end; border-bottom-right-radius: 2px; }
+  .bubble .ts { display: block; font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .empty { color: var(--muted); font-size: 13px; text-align: center; margin: auto; }
+
+  .composer {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    min-height: 40px;
+    max-height: 140px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .composer textarea:disabled { opacity: 0.5; }
+  .composer button {
+    background: var(--accent);
+    color: #06210f;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .composer button:hover { background: var(--accent-dim); }
+  .composer button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .msg { font-size: 12px; padding: 0 16px 8px; min-height: 14px; }
+  .msg.ok { color: var(--accent); }
+  .msg.err { color: var(--danger); }
+
+  /* ---------- Endpoints reference ---------- */
+  .endpoints-details { max-width: 1100px; margin: 20px auto; padding: 0 20px; color: var(--muted); }
+  .endpoints-details summary { cursor: pointer; font-size: 13px; padding: 8px 0; }
+  table.endpoints-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  .endpoints-table th {
+    text-align: left;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .endpoints-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .endpoints-table tr:last-child td { border-bottom: none; }
+  .method {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    min-width: 42px;
+    text-align: center;
+  }
+  .method.get { background: #1f3a5f; color: #7fb2ff; }
+  .method.post { background: #3a2f1f; color: #ffbd6b; }
+  .endpoints-table code { color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .endpoints-table .desc { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">WhatsApp Sender</div>
+      <div class="status-row">
+        <div class="dot" id="statusDot"></div>
+        <span class="state-label" id="statusLabel">loading…</span>
+        <button class="linklike" id="logoutBtn">log out</button>
+      </div>
+    </div>
+
+    <div id="qrPanel" style="display:none">
+      <img id="qrImg" alt="QR code" />
+      <div class="qr-hint">Scan with WhatsApp → Linked Devices → Link a Device</div>
+    </div>
+
+    <div class="new-chat-row">
+      <input type="text" id="newChatTo" placeholder="New chat: phone or group JID" />
+      <button id="newChatBtn">Open</button>
+    </div>
+
+    <div class="convo-list" id="convoList">
+      <div class="sidebar-empty">No saved conversations yet. Use "New chat" above, or wait for a message to arrive.</div>
+    </div>
+  </aside>
+
+  <main class="chat">
+    <div class="chat-header">
+      <div class="chat-title" id="chatTitle">Select a conversation</div>
+      <div class="chat-subtitle" id="chatSubtitle"></div>
+    </div>
+    <div class="messages" id="conversation">
+      <div class="empty">Select a conversation from the left, or start a new chat.</div>
+    </div>
+    <div class="msg" id="sendMsg"></div>
+    <div class="composer">
+      <textarea id="sendText" placeholder="Type a message..." disabled rows="1"></textarea>
+      <button id="sendBtn" disabled>Send</button>
+    </div>
+  </main>
+</div>
+
+<details class="endpoints-details">
+  <summary>API endpoints reference</summary>
+  <table class="endpoints-table">
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="method get">GET</span></td><td><code>/health</code></td><td class="desc">Liveness check — <code>{ ok: true }</code></td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/status</code></td><td class="desc">Connection state — connecting, qr_pending, connected, disconnected</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/qr</code></td><td class="desc">Pairing QR code as a PNG image, while a scan is pending</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/logout</code></td><td class="desc">Log out the linked device and clear the session (triggers a new QR code)</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/groups</code></td><td class="desc">List groups this account participates in, with their JIDs</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/conversations</code></td><td class="desc">List saved conversations (local, works while disconnected) with last-message preview</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/send</code></td><td class="desc">Send a message — body <code>{ to, message }</code> (phone number or group JID)</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/messages/:to</code></td><td class="desc">Recent stored messages for a conversation — query <code>?limit=</code> (default 50, max 500)</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/messages/:to/history</code></td><td class="desc">Request older messages be backfilled — body <code>{ count }</code>, results arrive async</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/mcp</code></td><td class="desc">MCP JSON-RPC endpoint (Streamable HTTP) — same tools as the stdio server</td></tr>
+    </tbody>
+  </table>
+</details>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  let body = null;
+  try { body = await res.json(); } catch (_) { /* non-JSON response, e.g. image */ }
+  if (!res.ok) {
+    const err = new Error((body && body.error) || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  return body;
+}
+
+let selectedChatId = null;
+
+async function pollStatus() {
+  try {
+    const { state } = await api('/status');
+    $('statusDot').className = 'dot ' + state;
+    $('statusLabel').textContent = state.replace('_', ' ');
+
+    if (state === 'qr_pending') {
+      $('qrImg').src = '/qr?t=' + Date.now();
+      $('qrPanel').style.display = 'block';
+    } else {
+      $('qrPanel').style.display = 'none';
+    }
+  } catch (err) {
+    $('statusDot').className = 'dot disconnected';
+    $('statusLabel').textContent = 'unreachable';
+  }
+}
+
+$('logoutBtn').addEventListener('click', async () => {
+  if (!confirm('Log out the linked device? You will need to rescan a QR code.')) return;
+  try {
+    await api('/logout', { method: 'POST' });
+  } catch (err) {
+    alert('Logout failed: ' + err.message);
+  }
+});
+
+function conversationLabel(chatJid, isGroup) {
+  return isGroup ? chatJid.split('@')[0] : chatJid.replace('@s.whatsapp.net', '');
+}
+
+// Mirrors the server's normalizeChatId (src/whatsapp.ts) so a phone number
+// typed into "New chat" matches the fully-qualified JID the store uses once
+// a message exists, keeping sidebar highlighting/selection consistent.
+function normalizeChatId(input) {
+  const trimmed = input.trim();
+  if (trimmed.includes('@')) return trimmed;
+  const digits = trimmed.replace(/\D/g, '');
+  return digits ? digits + '@s.whatsapp.net' : '';
+}
+
+function renderConversations(conversations) {
+  const el = $('convoList');
+  el.innerHTML = '';
+  if (!conversations.length) {
+    el.innerHTML = '<div class="sidebar-empty">No saved conversations yet. Use "New chat" above, or wait for a message to arrive.</div>';
+    return;
+  }
+  for (const c of conversations) {
+    const item = document.createElement('div');
+    item.className = 'convo-item' + (c.chatJid === selectedChatId ? ' active' : '');
+    const title = document.createElement('div');
+    title.className = 'title';
+    const label = document.createElement('span');
+    label.textContent = (c.isGroup ? '👥 ' : '') + conversationLabel(c.chatJid, c.isGroup);
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = c.count + ' msg' + (c.count === 1 ? '' : 's');
+    title.appendChild(label);
+    title.appendChild(count);
+    const preview = document.createElement('div');
+    preview.className = 'preview';
+    preview.textContent = (c.lastFromMe ? 'me: ' : '') + (c.lastText || '(empty)');
+    item.appendChild(title);
+    item.appendChild(preview);
+    item.addEventListener('click', () => selectConversation(c.chatJid, c.isGroup));
+    el.appendChild(item);
+  }
+}
+
+async function loadConversations() {
+  try {
+    const body = await api('/conversations');
+    renderConversations(body.conversations);
+  } catch (err) {
+    $('convoList').innerHTML = '<div class="sidebar-empty">Failed to load: ' + err.message + '</div>';
+  }
+}
+
+function renderMessages(messages) {
+  const el = $('conversation');
+  el.innerHTML = '';
+  if (!messages.length) {
+    el.innerHTML = '<div class="empty">No messages stored for this conversation yet.</div>';
+    return;
+  }
+  for (const m of messages) {
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble ' + (m.fromMe ? 'out' : 'in');
+    const ts = new Date(m.timestamp * 1000);
+    bubble.innerHTML = (m.text || '(empty)').replace(/</g, '&lt;') + '<span class="ts">' + ts.toLocaleString() + '</span>';
+    el.appendChild(bubble);
+  }
+  el.scrollTop = el.scrollHeight;
+}
+
+async function selectConversation(chatId, isGroup) {
+  selectedChatId = chatId;
+  $('chatTitle').textContent = (isGroup ? '👥 ' : '') + conversationLabel(chatId, !!isGroup);
+  $('chatSubtitle').textContent = chatId;
+  $('sendText').disabled = false;
+  $('sendBtn').disabled = false;
+  $('sendMsg').textContent = '';
+
+  $('conversation').innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const body = await api('/messages/' + encodeURIComponent(chatId) + '?limit=100');
+    renderMessages(body.messages);
+  } catch (err) {
+    $('conversation').innerHTML = '<div class="empty">Failed to load: ' + err.message + '</div>';
+  }
+  loadConversations();
+}
+
+$('newChatBtn').addEventListener('click', () => {
+  const to = normalizeChatId($('newChatTo').value);
+  if (!to) return;
+  selectConversation(to, to.includes('@g.us'));
+  $('newChatTo').value = '';
+});
+$('newChatTo').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('newChatBtn').click();
+});
+
+async function sendCurrentMessage() {
+  const message = $('sendText').value;
+  if (!selectedChatId || !message.trim()) return;
+  $('sendBtn').disabled = true;
+  $('sendMsg').textContent = '';
+  try {
+    await api('/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: selectedChatId, message }),
+    });
+    $('sendText').value = '';
+    setTimeout(() => selectConversation(selectedChatId, selectedChatId.includes('@g.us')), 800);
+  } catch (err) {
+    $('sendMsg').className = 'msg err';
+    $('sendMsg').textContent = err.message;
+  } finally {
+    $('sendBtn').disabled = false;
+  }
+}
+
+$('sendBtn').addEventListener('click', sendCurrentMessage);
+$('sendText').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendCurrentMessage();
+  }
+});
+
+pollStatus();
+setInterval(pollStatus, 3000);
+loadConversations();
+setInterval(loadConversations, 5000);
+</script>
+</body>
+</html>
