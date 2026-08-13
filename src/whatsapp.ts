@@ -18,11 +18,15 @@ import path from 'path';
 import {
   addMessage,
   ConversationSummary,
+  flushContacts,
   flushDirty,
+  getContactName,
   getMessages,
   getOldestMessage,
   listConversations as listStoredConversations,
+  loadPersistedContacts,
   loadPersistedMessages,
+  setContactName,
   StoredMessage,
 } from './messageStore';
 
@@ -42,6 +46,7 @@ function log(...args: unknown[]) {
 // Run once per process — warms the in-memory message store from disk so
 // conversation history survives a restart.
 loadPersistedMessages();
+loadPersistedContacts();
 
 let sock: WASocket | undefined;
 let state: ConnectionState = 'connecting';
@@ -98,26 +103,35 @@ function extractText(message: proto.IMessage | null | undefined): string {
 
 function storeIncomingMessages(messages: WAMessage[], source: string) {
   let stored = 0;
+  let contactsChanged = false;
   for (const msg of messages) {
     const chatJid = msg.key.remoteJid;
     if (!msg.message || !chatJid) continue;
     const timestamp =
       typeof msg.messageTimestamp === 'number' ? msg.messageTimestamp : Number(msg.messageTimestamp ?? 0);
+    const sender = msg.key.participant ?? chatJid;
     const record: StoredMessage = {
       id: msg.key.id ?? '',
       chatJid,
       fromMe: !!msg.key.fromMe,
-      sender: msg.key.participant ?? chatJid,
+      sender,
       timestamp,
       text: extractText(msg.message),
     };
     addMessage(record);
     stored += 1;
+
+    // pushName is the display name the sender's own device reports — not as
+    // reliable as a saved contact name (see contacts.upsert/update below),
+    // but it's the only name info available for chats without a synced
+    // contact, so use it as a fallback.
+    if (!msg.key.fromMe && setContactName(sender, msg.pushName)) contactsChanged = true;
   }
   if (stored > 0) {
     flushDirty();
     log(`[whatsapp] ${source}: stored ${stored} message(s)`);
   }
+  if (contactsChanged) flushContacts();
 }
 
 export async function connectToWhatsApp(): Promise<void> {
@@ -141,6 +155,25 @@ export async function connectToWhatsApp(): Promise<void> {
 
   sock.ev.on('messaging-history.set', ({ messages, isLatest }) => {
     storeIncomingMessages(messages, `messaging-history.set (isLatest=${isLatest})`);
+  });
+
+  // Saved-contact names (from the linked phone's address book), synced in
+  // bulk on first connect and incrementally afterward. Preferred over
+  // pushName when available since it's the name *you* gave the contact.
+  sock.ev.on('contacts.upsert', (contacts) => {
+    let changed = false;
+    for (const c of contacts) {
+      if (setContactName(c.id, c.name || c.notify)) changed = true;
+    }
+    if (changed) flushContacts();
+  });
+
+  sock.ev.on('contacts.update', (updates) => {
+    let changed = false;
+    for (const u of updates) {
+      if (u.id && setContactName(u.id, u.name || u.notify)) changed = true;
+    }
+    if (changed) flushContacts();
   });
 
   sock.ev.on('connection.update', (update) => {
@@ -215,17 +248,28 @@ export async function listGroups(): Promise<GroupSummary[]> {
   return Object.values(groups).map((g) => ({ id: g.id, subject: g.subject, size: g.participants?.length ?? 0 }));
 }
 
-export function getConversationMessages(to: string, limit = 50): StoredMessage[] {
-  return getMessages(normalizeChatId(to), limit);
+export interface ConversationMessage extends StoredMessage {
+  senderName?: string;
+}
+
+// Resolved at read time (not stored on the message) so a name learned after
+// a message was saved — e.g. contacts sync completing later — still shows up.
+export function getConversationMessages(to: string, limit = 50): ConversationMessage[] {
+  return getMessages(normalizeChatId(to), limit).map((m) => ({ ...m, senderName: getContactName(m.sender) }));
 }
 
 export interface ConversationListItem extends ConversationSummary {
   isGroup: boolean;
+  name?: string;
 }
 
 // Purely local — reads from the persisted store, no WhatsApp connection needed.
 export function listConversations(): ConversationListItem[] {
-  return listStoredConversations().map((c) => ({ ...c, isGroup: c.chatJid.endsWith('@g.us') }));
+  return listStoredConversations().map((c) => ({
+    ...c,
+    isGroup: c.chatJid.endsWith('@g.us'),
+    name: getContactName(c.chatJid),
+  }));
 }
 
 export async function requestMoreHistory(to: string, count = 50): Promise<void> {

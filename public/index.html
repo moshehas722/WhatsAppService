@@ -136,6 +136,7 @@
   .bubble.in { background: var(--bubble-in); align-self: flex-start; border-bottom-left-radius: 2px; }
   .bubble.out { background: var(--bubble-out); align-self: flex-end; border-bottom-right-radius: 2px; }
   .bubble .ts { display: block; font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .bubble .sender { display: block; font-size: 11px; font-weight: 600; color: var(--accent); margin-bottom: 2px; }
   .empty { color: var(--muted); font-size: 13px; text-align: center; margin: auto; }
 
   .composer {
@@ -331,20 +332,24 @@ function normalizeChatId(input) {
   return digits ? digits + '@s.whatsapp.net' : '';
 }
 
+let convoNames = {};
+
 function renderConversations(conversations) {
   const el = $('convoList');
   el.innerHTML = '';
+  convoNames = {};
   if (!conversations.length) {
     el.innerHTML = '<div class="sidebar-empty">No saved conversations yet. Use "New chat" above, or wait for a message to arrive.</div>';
     return;
   }
   for (const c of conversations) {
+    if (c.name) convoNames[c.chatJid] = c.name;
     const item = document.createElement('div');
     item.className = 'convo-item' + (c.chatJid === selectedChatId ? ' active' : '');
     const title = document.createElement('div');
     title.className = 'title';
     const label = document.createElement('span');
-    label.textContent = (c.isGroup ? '👥 ' : '') + conversationLabel(c.chatJid, c.isGroup);
+    label.textContent = (c.isGroup ? '👥 ' : '') + (c.name || conversationLabel(c.chatJid, c.isGroup));
     const count = document.createElement('span');
     count.className = 'count';
     count.textContent = c.count + ' msg' + (c.count === 1 ? '' : 's');
@@ -380,7 +385,14 @@ function renderMessages(messages) {
     const bubble = document.createElement('div');
     bubble.className = 'bubble ' + (m.fromMe ? 'out' : 'in');
     const ts = new Date(m.timestamp * 1000);
-    bubble.innerHTML = (m.text || '(empty)').replace(/</g, '&lt;') + '<span class="ts">' + ts.toLocaleString() + '</span>';
+    let senderLabel = '';
+    // Only worth labeling in groups — 1:1 chats have just the one other party,
+    // already named in the chat title.
+    if (!m.fromMe && selectedChatId && selectedChatId.endsWith('@g.us')) {
+      const name = m.senderName || (m.sender || '').replace('@s.whatsapp.net', '').split('@')[0];
+      senderLabel = '<span class="sender">' + name.replace(/</g, '&lt;') + '</span>';
+    }
+    bubble.innerHTML = senderLabel + (m.text || '(empty)').replace(/</g, '&lt;') + '<span class="ts">' + ts.toLocaleString() + '</span>';
     el.appendChild(bubble);
   }
   el.scrollTop = el.scrollHeight;
@@ -388,7 +400,7 @@ function renderMessages(messages) {
 
 async function selectConversation(chatId, isGroup) {
   selectedChatId = chatId;
-  $('chatTitle').textContent = (isGroup ? '👥 ' : '') + conversationLabel(chatId, !!isGroup);
+  $('chatTitle').textContent = (isGroup ? '👥 ' : '') + (convoNames[chatId] || conversationLabel(chatId, !!isGroup));
   $('chatSubtitle').textContent = chatId;
   $('sendText').disabled = false;
   $('sendBtn').disabled = false;

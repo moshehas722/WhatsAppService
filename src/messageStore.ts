@@ -12,6 +12,7 @@ export interface StoredMessage {
 
 const MAX_MESSAGES_PER_CHAT = 500;
 const STORE_DIR = path.join(process.cwd(), 'auth_info', 'messages');
+const CONTACTS_PATH = path.join(process.cwd(), 'auth_info', 'contacts.json');
 
 // Keyed by message id (falls back to a composite key if id is missing) so
 // re-delivery — e.g. history backfill re-sending a message already seen live —
@@ -108,6 +109,44 @@ export function getOldestMessage(chatJid: string): StoredMessage | undefined {
   const chatMap = messagesByChat.get(chatJid);
   if (!chatMap || chatMap.size === 0) return undefined;
   return sortedByTime(chatMap)[0];
+}
+
+// JID -> display name, learned from message pushName and contacts.upsert/update
+// events. Kept separate from messages since it's a small, slowly-changing map.
+const contactNames = new Map<string, string>();
+let contactsDirty = false;
+
+export function loadPersistedContacts(): void {
+  if (!fs.existsSync(CONTACTS_PATH)) return;
+  try {
+    const saved: Record<string, string> = JSON.parse(fs.readFileSync(CONTACTS_PATH, 'utf8'));
+    for (const [jid, name] of Object.entries(saved)) contactNames.set(jid, name);
+  } catch (err) {
+    console.error('[messageStore] failed to load contacts:', err);
+  }
+}
+
+// Returns true if the name was new/changed, so callers can batch a flush.
+export function setContactName(jid: string, name: string | undefined | null): boolean {
+  if (!jid || !name || contactNames.get(jid) === name) return false;
+  contactNames.set(jid, name);
+  contactsDirty = true;
+  return true;
+}
+
+export function getContactName(jid: string): string | undefined {
+  return contactNames.get(jid);
+}
+
+export function flushContacts(): void {
+  if (!contactsDirty) return;
+  try {
+    fs.mkdirSync(path.dirname(CONTACTS_PATH), { recursive: true });
+    fs.writeFileSync(CONTACTS_PATH, JSON.stringify(Object.fromEntries(contactNames)));
+    contactsDirty = false;
+  } catch (err) {
+    console.error('[messageStore] failed to persist contacts:', err);
+  }
 }
 
 export interface ConversationSummary {
