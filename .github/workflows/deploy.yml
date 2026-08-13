@@ -14,4 +14,4 @@ jobs:
                        # auth_info/ (WhatsApp session + TLS cert) and .env since they're gitignored
 
       - name: Build and restart
-        run: docker compose up -d --build
+        run: docker compose -f deploy/docker/docker-compose.yml up -d --build

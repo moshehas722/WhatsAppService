@@ -1,14 +1,14 @@
 services:
   whatapp-agent:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
     image: whatapp-agent:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
       - "3443:3443"
     volumes:
-      - ./auth_info:/app/backend/auth_info
+      - ../../auth_info:/app/backend/auth_info
     env_file:
-      - .env
+      - ../../.env
