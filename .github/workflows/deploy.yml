@@ -19,5 +19,14 @@ jobs:
         # Idempotent: no-op if it already exists.
         run: docker network create whatapp-agent-net 2>/dev/null || true
 
+      - name: Stop existing containers
+        # Explicit teardown before rebuilding — `up --build`'s implicit
+        # recreate has been leaving the old container running and holding
+        # port 3000, failing every subsequent deploy. `down` is safe/
+        # idempotent (matches containers by compose project+service labels,
+        # not by name, so it finds the old container even though its name
+        # predates the container_name field added later).
+        run: docker compose -f deploy/docker/docker-compose.yml down --remove-orphans
+
       - name: Build and restart
         run: docker compose -f deploy/docker/docker-compose.yml up -d --build
