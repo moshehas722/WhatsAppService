@@ -155,8 +155,15 @@
   }
   .plugin-option:last-child { border-bottom: none; }
   .plugin-option input { margin-top: 3px; }
-  .plugin-option .plugin-name { font-size: 13.5px; font-weight: 600; }
+  .plugin-option .plugin-name { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
   .plugin-option .plugin-desc { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .health-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 400; color: var(--muted); }
+  .health-badge .health-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .health-badge.healthy .health-dot { background: var(--accent); }
+  .health-badge.unhealthy .health-dot { background: var(--danger); }
+  .health-badge.unhealthy { color: var(--danger); }
+  .not-found-badge { font-size: 10.5px; font-weight: 600; color: var(--danger); }
   .plugin-config-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
   .plugin-config-field { margin-bottom: 10px; }
   .plugin-config-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
@@ -407,6 +414,11 @@
       <tr><td><span class="method post">POST</span></td><td><code>/mcp</code></td><td class="desc">MCP JSON-RPC endpoint (Streamable HTTP) — same tools as the stdio server</td></tr>
       <tr><td><span class="method get">GET</span></td><td><code>/plugins</code></td><td class="desc">List available plugins, with their config JSON schema (if any)</td></tr>
       <tr><td><span class="method get">GET</span></td><td><code>/plugins/assignments</code></td><td class="desc">List every conversation that currently has a plugin attached</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/plugins/registrations</code></td><td class="desc">List raw remote plugin registrations (id, baseUrl, health) — not just assigned ones</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/plugins/register</code></td><td class="desc">Remote plugin self-registration — body <code>{ pluginId, name, description, baseUrl, configJsonSchema }</code>, header <code>X-Plugin-Secret</code> to re-register</td></tr>
+      <tr><td><span class="method post">DELETE</span></td><td><code>/plugins/register</code></td><td class="desc">Remote plugin unregisters itself — body <code>{ pluginId }</code>, header <code>X-Plugin-Secret</code></td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/plugins/heartbeat</code></td><td class="desc">Remote plugin liveness ping — body <code>{ pluginId }</code>, header <code>X-Plugin-Secret</code></td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/plugins/callback</code></td><td class="desc">Remote plugin's async reply — body <code>{ pluginId, requestId, chatJid, reply }</code>, header <code>X-Plugin-Secret</code></td></tr>
       <tr><td><span class="method get">GET</span></td><td><code>/conversations/:to/plugin</code></td><td class="desc">Get the plugin currently assigned to a conversation, if any</td></tr>
       <tr><td><span class="method post">PUT</span></td><td><code>/conversations/:to/plugin</code></td><td class="desc">Assign a plugin to a conversation — body <code>{ pluginId, config }</code></td></tr>
       <tr><td><span class="method post">PATCH</span></td><td><code>/conversations/:to/plugin</code></td><td class="desc">Enable/disable the assigned plugin — body <code>{ enabled }</code></td></tr>
@@ -690,6 +702,16 @@ function readPluginConfigForm(jsonSchema) {
   return config;
 }
 
+// Shared by the picker and the manage screen — only remote plugins have a
+// meaningful health state; local/built-in ones show nothing.
+function healthBadgeHtml(item) {
+  if (!item.remote) return '';
+  if (item.healthy) return '<span class="health-badge healthy"><span class="health-dot"></span>online</span>';
+  const lastSeen = item.lastSeenAt ? Math.max(0, Math.round(Date.now() / 1000 - item.lastSeenAt)) : null;
+  const label = lastSeen == null ? 'unreachable' : lastSeen < 60 ? 'unreachable · seen just now' : `unreachable · seen ${Math.round(lastSeen / 60)}m ago`;
+  return '<span class="health-badge unhealthy"><span class="health-dot"></span>' + label + '</span>';
+}
+
 function renderPluginOptions() {
   const list = $('pluginOptionsList');
   const noneOption = `
@@ -702,7 +724,7 @@ function renderPluginOptions() {
       (p) => `
     <label class="plugin-option">
       <input type="radio" name="pluginChoice" value="${p.id}" ${selectedPluginId === p.id ? 'checked' : ''} />
-      <div><div class="plugin-name">${p.name}</div><div class="plugin-desc">${p.description}</div></div>
+      <div><div class="plugin-name">${p.name}${healthBadgeHtml(p)}</div><div class="plugin-desc">${p.description}</div></div>
     </label>`,
     )
     .join('');
@@ -821,7 +843,7 @@ function renderManageList(assignments) {
     <div class="manage-row" data-jid="${a.chatJid.replace(/"/g, '&quot;')}">
       <div class="manage-info">
         <div class="manage-name">${manageRowLabel(a).replace(/</g, '&lt;')}</div>
-        <div class="manage-plugin">${(a.pluginName || a.pluginId).replace(/</g, '&lt;')}</div>
+        <div class="manage-plugin">${(a.pluginName || a.pluginId).replace(/</g, '&lt;')}${a.pluginFound ? healthBadgeHtml(a) : ' <span class="not-found-badge">plugin not found</span>'}</div>
       </div>
       <label class="toggle-switch" title="${a.enabled ? 'Enabled' : 'Disabled'}">
         <input type="checkbox" class="manage-toggle" data-index="${i}" ${a.enabled ? 'checked' : ''} />

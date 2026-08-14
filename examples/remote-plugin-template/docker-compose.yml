@@ -1,0 +1,23 @@
+services:
+  plugin-keyword-example:
+    build: .
+    image: remote-plugin-template:latest
+    container_name: plugin-keyword-example
+    restart: unless-stopped
+    environment:
+      MAIN_SERVICE_URL: http://whatapp-agent:3000
+      PLUGIN_ID: example-keyword-responder-remote
+      PLUGIN_BASE_URL: http://plugin-keyword-example:4000
+      PORT: 4000
+    volumes:
+      - ./data:/app/data
+    networks:
+      - whatapp-agent-net
+
+# Joins the same external network the main whatapp-agent service is on —
+# created once via `docker network create whatapp-agent-net` (see the main
+# repo's README). Not published to the host; only the main service needs to
+# reach this container, over the internal network.
+networks:
+  whatapp-agent-net:
+    external: true

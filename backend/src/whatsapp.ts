@@ -378,6 +378,8 @@ export interface ConversationListItem extends ConversationSummary {
   name?: string;
   pluginId?: string;
   pluginEnabled?: boolean;
+  pluginRemote?: boolean;
+  pluginHealthy?: boolean;
 }
 
 // Purely local — reads from the persisted store, no WhatsApp connection needed.
@@ -390,6 +392,8 @@ export function listConversations(): ConversationListItem[] {
       name: getContactName(c.chatJid),
       pluginId: assignment?.pluginId,
       pluginEnabled: assignment?.enabled,
+      pluginRemote: assignment?.remote,
+      pluginHealthy: assignment?.healthy,
     };
   });
 }
@@ -402,6 +406,10 @@ export interface ConversationPluginAssignment {
   pluginName?: string;
   enabled: boolean;
   config: unknown;
+  pluginFound: boolean;
+  remote: boolean;
+  healthy?: boolean;
+  lastSeenAt?: number;
 }
 
 // For the plugin-management screen: every conversation that currently has a
@@ -416,6 +424,10 @@ export function listPluginAssignments(): ConversationPluginAssignment[] {
     pluginName: a.pluginName,
     enabled: a.enabled,
     config: a.config,
+    pluginFound: a.pluginFound,
+    remote: a.remote,
+    healthy: a.healthy,
+    lastSeenAt: a.lastSeenAt,
   }));
 }
 

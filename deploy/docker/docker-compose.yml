@@ -4,6 +4,7 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
     image: whatapp-agent:latest
+    container_name: whatapp-agent
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -12,3 +13,14 @@ services:
       - ../../auth_info:/app/backend/auth_info
     env_file:
       - ../../.env
+    networks:
+      - whatapp-agent-net
+
+# External, unowned network: created once via `docker network create
+# whatapp-agent-net` (see README) rather than "owned" by this compose
+# project — that way `docker compose down` here never tries to remove a
+# network that separate plugin projects are still attached to, and plugin
+# projects don't need this project running first to create it.
+networks:
+  whatapp-agent-net:
+    external: true

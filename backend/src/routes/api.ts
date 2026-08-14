@@ -12,6 +12,7 @@ import {
   sendMessage,
 } from '../whatsapp';
 import * as pluginManager from '../plugins/manager';
+import * as remoteRegistry from '../plugins/remoteRegistry';
 
 export const apiRouter = Router();
 
@@ -91,6 +92,17 @@ apiRouter.get('/plugins', (_req, res) => {
 apiRouter.get('/plugins/assignments', (_req, res) => {
   const assignments = listPluginAssignments();
   res.json({ count: assignments.length, assignments });
+});
+
+// Raw remote plugin registrations — useful since a plugin can be registered
+// but not (yet) assigned to any conversation, which the assignments list
+// above can't show. Never includes the secret field.
+apiRouter.get('/plugins/registrations', (_req, res) => {
+  const registrations = remoteRegistry.list().map((reg) => {
+    const { secret: _secret, ...rest } = reg;
+    return { ...rest, healthy: remoteRegistry.isHealthy(reg) };
+  });
+  res.json({ count: registrations.length, registrations });
 });
 
 apiRouter.get('/conversations/:to/plugin', (req, res) => {

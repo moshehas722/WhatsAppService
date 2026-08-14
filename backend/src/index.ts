@@ -5,9 +5,16 @@ import path from 'path';
 import express, { NextFunction, Request, Response } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { apiRouter } from './routes/api';
+import { pluginRegistrationRouter } from './routes/pluginRegistration';
+import { pluginCallbackRouter } from './routes/pluginCallback';
 import { createMcpServer } from './mcpServer';
 import { getOrCreateSelfSignedCert } from './tls';
 import { connectToWhatsApp } from './whatsapp';
+import { loadPersistedRemoteRegistrations } from './plugins/remoteRegistry';
+import { startPendingRepliesSweep } from './plugins/pendingReplies';
+
+loadPersistedRemoteRegistrations();
+startPendingRepliesSweep();
 
 const app = express();
 app.use(cors());
@@ -29,6 +36,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use(express.static(path.join(__dirname, '..', '..', 'frontend')));
 
 app.use(apiRouter);
+app.use(pluginRegistrationRouter);
+app.use(pluginCallbackRouter);
 
 // Stateless MCP over Streamable HTTP: the SDK requires a fresh server+transport
 // pair per request in stateless mode (sessionIdGenerator undefined) — reusing

@@ -1,0 +1,21 @@
+{
+  "name": "remote-plugin-template",
+  "version": "1.0.0",
+  "description": "Reference implementation of an out-of-process WhatsApp agent plugin — a keyword auto-responder, running as its own Docker service.",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.19.43",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.3"
+  }
+}

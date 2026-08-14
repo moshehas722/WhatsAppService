@@ -1,6 +1,7 @@
-import { z } from 'zod';
 import * as registry from './registry';
 import * as assignmentStore from './assignmentStore';
+import * as remoteRegistry from './remoteRegistry';
+import * as configSchemaHelpers from './configSchema';
 import { PluginContext, PluginMessage, PluginSummary } from './types';
 
 export const PLUGIN_HISTORY_LIMIT = 20;
@@ -9,12 +10,22 @@ export function loadPluginAssignments(): void {
   assignmentStore.loadPersistedPluginAssignments();
 }
 
+// Health fields only apply to remote plugins — undefined for local/static ones.
+function healthFields(pluginId: string): { remote: boolean; healthy?: boolean; lastSeenAt?: number } {
+  const remote = !registry.staticPluginIds.has(pluginId);
+  if (!remote) return { remote: false };
+  const registration = remoteRegistry.get(pluginId);
+  if (!registration) return { remote: true };
+  return { remote: true, healthy: remoteRegistry.isHealthy(registration), lastSeenAt: registration.lastSeenAt };
+}
+
 export function listAvailablePlugins(): PluginSummary[] {
   return registry.listPlugins().map((p) => ({
     id: p.id,
     name: p.name,
     description: p.description,
-    configJsonSchema: p.configSchema ? (z.toJSONSchema(p.configSchema) as object) : undefined,
+    configJsonSchema: configSchemaHelpers.toJsonSchema(p),
+    ...healthFields(p.id),
   }));
 }
 
@@ -24,15 +35,22 @@ export interface AssignmentView {
   pluginName?: string;
   config: unknown;
   enabled: boolean;
+  pluginFound: boolean;
+  remote: boolean;
+  healthy?: boolean;
+  lastSeenAt?: number;
 }
 
 function toView(assignment: assignmentStore.PluginAssignment): AssignmentView {
+  const plugin = registry.getPlugin(assignment.pluginId);
   return {
     chatJid: assignment.chatJid,
     pluginId: assignment.pluginId,
-    pluginName: registry.getPlugin(assignment.pluginId)?.name,
+    pluginName: plugin?.name,
     config: assignment.config,
     enabled: assignment.enabled,
+    pluginFound: !!plugin,
+    ...healthFields(assignment.pluginId),
   };
 }
 
@@ -68,20 +86,12 @@ export function assignPlugin(chatJid: string, pluginId: string, config: unknown)
     return { ok: false, error: `Unknown plugin id "${pluginId}".` };
   }
 
-  if (!plugin.configSchema) {
-    // No schema means config is meaningless for this plugin — drop it
-    // silently rather than erroring on an unexpected body field.
-    assignmentStore.setPluginAssignment(chatJid, pluginId, undefined);
-    return { ok: true };
+  const result = configSchemaHelpers.validateConfig(plugin, config);
+  if (!result.success) {
+    return { ok: false, error: result.error };
   }
 
-  const parsed = plugin.configSchema.safeParse(config);
-  if (!parsed.success) {
-    const error = parsed.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`).join('; ');
-    return { ok: false, error };
-  }
-
-  assignmentStore.setPluginAssignment(chatJid, pluginId, parsed.data);
+  assignmentStore.setPluginAssignment(chatJid, pluginId, result.data);
   return { ok: true };
 }
 
