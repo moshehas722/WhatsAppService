@@ -63,9 +63,9 @@
   #qrImg { max-width: 100%; border-radius: 8px; background: #fff; padding: 8px; }
   .qr-hint { color: var(--muted); font-size: 11px; margin-top: 8px; }
 
-  .new-chat-row { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-  .new-chat-row input {
-    flex: 1;
+  .search-row { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .search-row input {
+    width: 100%;
     background: var(--panel-2);
     border: 1px solid var(--border);
     color: var(--text);
@@ -73,16 +73,7 @@
     padding: 7px 9px;
     font-size: 12px;
   }
-  .new-chat-row button {
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 7px 10px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .new-chat-row button:hover { background: var(--bubble-in); }
+  .search-row input:focus { outline: 1px solid var(--accent-dim); }
 
   .convo-list { flex: 1; overflow-y: auto; }
   .convo-item {
@@ -92,8 +83,11 @@
   }
   .convo-item:hover { background: var(--panel-2); }
   .convo-item.active { background: var(--bubble-in); }
-  .convo-item .title { font-weight: 600; font-size: 13.5px; display: flex; justify-content: space-between; gap: 8px; }
+  .convo-item .title { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .convo-item .title .title-left { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .convo-item .title .count { color: var(--muted); font-weight: 400; font-size: 11px; flex-shrink: 0; }
+  .convo-item .plugin-icon { flex-shrink: 0; font-size: 11px; opacity: 1; }
+  .convo-item .plugin-icon.disabled { opacity: 0.35; }
   .convo-item .preview {
     color: var(--muted);
     font-size: 12px;
@@ -112,8 +106,120 @@
     background: var(--panel);
     flex-shrink: 0;
   }
+  .chat-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .chat-title { font-weight: 700; font-size: 15px; }
   .chat-subtitle { color: var(--muted); font-size: 11px; margin-top: 2px; word-break: break-all; }
+  #pluginBtn {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #pluginBtn:hover:not(:disabled) { background: var(--bubble-in); }
+  #pluginBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    width: 420px;
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 18px 20px;
+  }
+  .modal-panel h3 { margin: 0 0 4px; font-size: 15px; }
+  .modal-panel .modal-hint { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .plugin-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .plugin-option:last-child { border-bottom: none; }
+  .plugin-option input { margin-top: 3px; }
+  .plugin-option .plugin-name { font-size: 13.5px; font-weight: 600; }
+  .plugin-option .plugin-desc { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .plugin-config-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .plugin-config-field { margin-bottom: 10px; }
+  .plugin-config-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .plugin-config-field input, .plugin-config-field select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 7px 9px;
+    font-size: 13px;
+  }
+  .plugin-config-field input[type="checkbox"] { width: auto; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .modal-actions button {
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+  }
+  #pluginCancelBtn { background: var(--panel-2); color: var(--text); }
+  #pluginSaveBtn { background: var(--accent); color: #06210f; border: none; font-weight: 600; }
+  #pluginModalMsg { font-size: 12px; margin-top: 10px; min-height: 14px; }
+  #pluginModalMsg.err { color: var(--danger); }
+
+  /* ---------- Plugin management screen ---------- */
+  .modal-panel-wide { width: 640px; }
+  .manage-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .manage-row:last-child { border-bottom: none; }
+  .manage-row .manage-info { flex: 1; min-width: 0; }
+  .manage-row .manage-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .manage-row .manage-plugin { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .manage-row .manage-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .manage-row .manage-actions button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .manage-row .manage-actions button:hover { background: var(--bubble-in); }
+  .manage-row .manage-actions button.danger:hover { background: var(--danger); color: #fff; }
+  .toggle-switch { position: relative; width: 34px; height: 19px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-switch .slider {
+    position: absolute; inset: 0; background: var(--border); border-radius: 19px; cursor: pointer; transition: background 0.15s;
+  }
+  .toggle-switch .slider::before {
+    content: ""; position: absolute; width: 15px; height: 15px; left: 2px; top: 2px;
+    background: #fff; border-radius: 50%; transition: transform 0.15s;
+  }
+  .toggle-switch input:checked + .slider { background: var(--accent); }
+  .toggle-switch input:checked + .slider::before { transform: translateX(15px); }
+  #manageEmpty { color: var(--muted); font-size: 13px; text-align: center; padding: 20px 0; }
 
   .messages {
     flex: 1;
@@ -218,6 +324,7 @@
         <div class="dot" id="statusDot"></div>
         <span class="state-label" id="statusLabel">loading…</span>
         <button class="linklike" id="logoutBtn">log out</button>
+        <button class="linklike" id="manageBtn">manage plugins</button>
       </div>
     </div>
 
@@ -226,20 +333,24 @@
       <div class="qr-hint">Scan with WhatsApp → Linked Devices → Link a Device</div>
     </div>
 
-    <div class="new-chat-row">
-      <input type="text" id="newChatTo" placeholder="New chat: phone or group JID" />
-      <button id="newChatBtn">Open</button>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="Search conversations…" />
     </div>
 
     <div class="convo-list" id="convoList">
-      <div class="sidebar-empty">No saved conversations yet. Use "New chat" above, or wait for a message to arrive.</div>
+      <div class="sidebar-empty">No saved conversations yet. Wait for a message to arrive.</div>
     </div>
   </aside>
 
   <main class="chat">
     <div class="chat-header">
-      <div class="chat-title" id="chatTitle">Select a conversation</div>
-      <div class="chat-subtitle" id="chatSubtitle"></div>
+      <div class="chat-header-row">
+        <div>
+          <div class="chat-title" id="chatTitle">Select a conversation</div>
+          <div class="chat-subtitle" id="chatSubtitle"></div>
+        </div>
+        <button id="pluginBtn" disabled>🔌 Plugin</button>
+      </div>
     </div>
     <div class="messages" id="conversation">
       <div class="empty">Select a conversation from the left, or start a new chat.</div>
@@ -250,6 +361,31 @@
       <button id="sendBtn" disabled>Send</button>
     </div>
   </main>
+</div>
+
+<div class="modal-overlay" id="pluginModalOverlay">
+  <div class="modal-panel">
+    <h3>Conversation plugin</h3>
+    <div class="modal-hint">Attach a plugin to auto-respond to new messages in this conversation.</div>
+    <div id="pluginOptionsList"></div>
+    <div class="plugin-config-form" id="pluginConfigForm" style="display:none"></div>
+    <div id="pluginModalMsg"></div>
+    <div class="modal-actions">
+      <button id="pluginCancelBtn">Cancel</button>
+      <button id="pluginSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="manageModalOverlay">
+  <div class="modal-panel modal-panel-wide">
+    <h3>Plugin management</h3>
+    <div class="modal-hint">Every conversation with a plugin attached — toggle, edit, or remove it here.</div>
+    <div id="manageList"></div>
+    <div class="modal-actions">
+      <button id="manageCloseBtn">Close</button>
+    </div>
+  </div>
 </div>
 
 <details class="endpoints-details">
@@ -269,6 +405,12 @@
       <tr><td><span class="method get">GET</span></td><td><code>/messages/:to</code></td><td class="desc">Recent stored messages for a conversation — query <code>?limit=</code> (default 50, max 500)</td></tr>
       <tr><td><span class="method post">POST</span></td><td><code>/messages/:to/history</code></td><td class="desc">Request older messages be backfilled — body <code>{ count }</code>, results arrive async</td></tr>
       <tr><td><span class="method post">POST</span></td><td><code>/mcp</code></td><td class="desc">MCP JSON-RPC endpoint (Streamable HTTP) — same tools as the stdio server</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/plugins</code></td><td class="desc">List available plugins, with their config JSON schema (if any)</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/plugins/assignments</code></td><td class="desc">List every conversation that currently has a plugin attached</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/conversations/:to/plugin</code></td><td class="desc">Get the plugin currently assigned to a conversation, if any</td></tr>
+      <tr><td><span class="method post">PUT</span></td><td><code>/conversations/:to/plugin</code></td><td class="desc">Assign a plugin to a conversation — body <code>{ pluginId, config }</code></td></tr>
+      <tr><td><span class="method post">PATCH</span></td><td><code>/conversations/:to/plugin</code></td><td class="desc">Enable/disable the assigned plugin — body <code>{ enabled }</code></td></tr>
+      <tr><td><span class="method post">DELETE</span></td><td><code>/conversations/:to/plugin</code></td><td class="desc">Detach the plugin from a conversation</td></tr>
     </tbody>
   </table>
 </details>
@@ -322,24 +464,28 @@ function conversationLabel(chatJid, isGroup) {
   return isGroup ? chatJid.split('@')[0] : chatJid.replace('@s.whatsapp.net', '');
 }
 
-// Mirrors the server's normalizeChatId (src/whatsapp.ts) so a phone number
-// typed into "New chat" matches the fully-qualified JID the store uses once
-// a message exists, keeping sidebar highlighting/selection consistent.
-function normalizeChatId(input) {
-  const trimmed = input.trim();
-  if (trimmed.includes('@')) return trimmed;
-  const digits = trimmed.replace(/\D/g, '');
-  return digits ? digits + '@s.whatsapp.net' : '';
+let convoNames = {};
+let allConversations = [];
+
+function matchesSearch(c, term) {
+  if (!term) return true;
+  const haystack = (c.name || '') + ' ' + conversationLabel(c.chatJid, c.isGroup) + ' ' + c.chatJid;
+  return haystack.toLowerCase().includes(term);
 }
 
-let convoNames = {};
+function applyConversationFilter() {
+  const term = $('searchInput').value.trim().toLowerCase();
+  renderConversations(allConversations.filter((c) => matchesSearch(c, term)));
+}
 
 function renderConversations(conversations) {
   const el = $('convoList');
   el.innerHTML = '';
   convoNames = {};
   if (!conversations.length) {
-    el.innerHTML = '<div class="sidebar-empty">No saved conversations yet. Use "New chat" above, or wait for a message to arrive.</div>';
+    el.innerHTML = allConversations.length
+      ? '<div class="sidebar-empty">No conversations match your search.</div>'
+      : '<div class="sidebar-empty">No saved conversations yet. Wait for a message to arrive.</div>';
     return;
   }
   for (const c of conversations) {
@@ -348,12 +494,22 @@ function renderConversations(conversations) {
     item.className = 'convo-item' + (c.chatJid === selectedChatId ? ' active' : '');
     const title = document.createElement('div');
     title.className = 'title';
+    const titleLeft = document.createElement('span');
+    titleLeft.className = 'title-left';
     const label = document.createElement('span');
     label.textContent = (c.isGroup ? '👥 ' : '') + (c.name || conversationLabel(c.chatJid, c.isGroup));
+    titleLeft.appendChild(label);
+    if (c.pluginId) {
+      const pluginIcon = document.createElement('span');
+      pluginIcon.className = 'plugin-icon' + (c.pluginEnabled ? '' : ' disabled');
+      pluginIcon.textContent = '🔌';
+      pluginIcon.title = c.pluginEnabled ? 'Plugin attached' : 'Plugin attached (disabled)';
+      titleLeft.appendChild(pluginIcon);
+    }
     const count = document.createElement('span');
     count.className = 'count';
     count.textContent = c.count + ' msg' + (c.count === 1 ? '' : 's');
-    title.appendChild(label);
+    title.appendChild(titleLeft);
     title.appendChild(count);
     const preview = document.createElement('div');
     preview.className = 'preview';
@@ -365,17 +521,38 @@ function renderConversations(conversations) {
   }
 }
 
+// Tracks the last known message count (from /conversations) for whichever
+// chat is currently open, so the poll below can tell "did this chat get a
+// new message" apart from "nothing changed" without re-fetching every chat's
+// full message list every 5s — only the open one.
+let openChatKnownCount = null;
+
 async function loadConversations() {
   try {
     const body = await api('/conversations');
-    renderConversations(body.conversations);
+    allConversations = body.conversations;
+    applyConversationFilter();
+
+    if (selectedChatId) {
+      const entry = allConversations.find((c) => c.chatJid === selectedChatId);
+      const currentCount = entry ? entry.count : 0;
+      if (currentCount !== openChatKnownCount) {
+        openChatKnownCount = currentCount;
+        refreshOpenConversationMessages();
+      }
+    }
   } catch (err) {
     $('convoList').innerHTML = '<div class="sidebar-empty">Failed to load: ' + err.message + '</div>';
   }
 }
 
-function renderMessages(messages) {
+function renderMessages(messages, opts) {
   const el = $('conversation');
+  // Force-scroll on an explicit open/switch; otherwise (background refresh)
+  // only follow along if the user was already near the bottom, so we don't
+  // yank them away from history they scrolled up to read.
+  const forceScroll = !opts || opts.forceScroll;
+  const wasNearBottom = forceScroll || el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   el.innerHTML = '';
   if (!messages.length) {
     el.innerHTML = '<div class="empty">No messages stored for this conversation yet.</div>';
@@ -395,36 +572,40 @@ function renderMessages(messages) {
     bubble.innerHTML = senderLabel + (m.text || '(empty)').replace(/</g, '&lt;') + '<span class="ts">' + ts.toLocaleString() + '</span>';
     el.appendChild(bubble);
   }
-  el.scrollTop = el.scrollHeight;
+  if (wasNearBottom) el.scrollTop = el.scrollHeight;
+}
+
+async function refreshOpenConversationMessages() {
+  if (!selectedChatId) return;
+  try {
+    const body = await api('/messages/' + encodeURIComponent(selectedChatId) + '?limit=100');
+    renderMessages(body.messages, { forceScroll: false });
+  } catch (err) {
+    // Transient poll failure — leave whatever's on screen, next 5s tick retries.
+  }
 }
 
 async function selectConversation(chatId, isGroup) {
   selectedChatId = chatId;
+  openChatKnownCount = null;
   $('chatTitle').textContent = (isGroup ? '👥 ' : '') + (convoNames[chatId] || conversationLabel(chatId, !!isGroup));
   $('chatSubtitle').textContent = chatId;
   $('sendText').disabled = false;
   $('sendBtn').disabled = false;
   $('sendMsg').textContent = '';
+  $('pluginBtn').disabled = false;
 
   $('conversation').innerHTML = '<div class="empty">Loading…</div>';
   try {
     const body = await api('/messages/' + encodeURIComponent(chatId) + '?limit=100');
-    renderMessages(body.messages);
+    renderMessages(body.messages, { forceScroll: true });
   } catch (err) {
     $('conversation').innerHTML = '<div class="empty">Failed to load: ' + err.message + '</div>';
   }
   loadConversations();
 }
 
-$('newChatBtn').addEventListener('click', () => {
-  const to = normalizeChatId($('newChatTo').value);
-  if (!to) return;
-  selectConversation(to, to.includes('@g.us'));
-  $('newChatTo').value = '';
-});
-$('newChatTo').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') $('newChatBtn').click();
-});
+$('searchInput').addEventListener('input', applyConversationFilter);
 
 async function sendCurrentMessage() {
   const message = $('sendText').value;
@@ -453,6 +634,275 @@ $('sendText').addEventListener('keydown', (e) => {
     e.preventDefault();
     sendCurrentMessage();
   }
+});
+
+// ---------- Plugin picker ----------
+let availablePlugins = [];
+let selectedPluginId = null;
+
+function fieldInputForSchema(name, propSchema, value) {
+  const type = propSchema.type;
+  if (type === 'boolean') {
+    return `<input type="checkbox" id="pf_${name}" ${value ? 'checked' : ''} />`;
+  }
+  if (propSchema.enum) {
+    const opts = propSchema.enum
+      .map((v) => `<option value="${String(v).replace(/"/g, '&quot;')}" ${value === v ? 'selected' : ''}>${v}</option>`)
+      .join('');
+    return `<select id="pf_${name}">${opts}</select>`;
+  }
+  if (type === 'number' || type === 'integer') {
+    return `<input type="number" id="pf_${name}" value="${value ?? ''}" />`;
+  }
+  return `<input type="text" id="pf_${name}" value="${value == null ? '' : String(value).replace(/"/g, '&quot;')}" />`;
+}
+
+function renderPluginConfigForm(jsonSchema, currentConfig) {
+  const form = $('pluginConfigForm');
+  const props = (jsonSchema && jsonSchema.properties) || {};
+  const keys = Object.keys(props);
+  if (!keys.length) {
+    form.style.display = 'none';
+    form.innerHTML = '';
+    return;
+  }
+  form.innerHTML = keys
+    .map((name) => {
+      const propSchema = props[name];
+      const label = propSchema.description || name;
+      return `<div class="plugin-config-field"><label for="pf_${name}">${label}</label>${fieldInputForSchema(name, propSchema, (currentConfig || {})[name])}</div>`;
+    })
+    .join('');
+  form.style.display = 'block';
+}
+
+function readPluginConfigForm(jsonSchema) {
+  const props = (jsonSchema && jsonSchema.properties) || {};
+  const config = {};
+  for (const name of Object.keys(props)) {
+    const el = $('pf_' + name);
+    if (!el) continue;
+    const type = props[name].type;
+    if (type === 'boolean') config[name] = el.checked;
+    else if (type === 'number' || type === 'integer') config[name] = Number(el.value);
+    else config[name] = el.value;
+  }
+  return config;
+}
+
+function renderPluginOptions() {
+  const list = $('pluginOptionsList');
+  const noneOption = `
+    <label class="plugin-option">
+      <input type="radio" name="pluginChoice" value="" ${selectedPluginId === null ? 'checked' : ''} />
+      <div><div class="plugin-name">None</div><div class="plugin-desc">Don't auto-respond in this conversation.</div></div>
+    </label>`;
+  const pluginOptions = availablePlugins
+    .map(
+      (p) => `
+    <label class="plugin-option">
+      <input type="radio" name="pluginChoice" value="${p.id}" ${selectedPluginId === p.id ? 'checked' : ''} />
+      <div><div class="plugin-name">${p.name}</div><div class="plugin-desc">${p.description}</div></div>
+    </label>`,
+    )
+    .join('');
+  list.innerHTML = noneOption + pluginOptions;
+
+  list.querySelectorAll('input[name="pluginChoice"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      selectedPluginId = input.value || null;
+      const plugin = availablePlugins.find((p) => p.id === selectedPluginId);
+      if (plugin && plugin.configJsonSchema) {
+        renderPluginConfigForm(plugin.configJsonSchema, currentPluginConfig);
+      } else {
+        $('pluginConfigForm').style.display = 'none';
+        $('pluginConfigForm').innerHTML = '';
+      }
+    });
+  });
+}
+
+let currentPluginConfig = {};
+// Which chat the plugin modal is editing — decoupled from selectedChatId so
+// opening it from the management screen doesn't switch the open conversation.
+let pluginModalChatId = null;
+// Set when the edit modal was opened from the management screen (which gets
+// closed first, since the two modals share a z-index) — so we know to
+// reopen it afterwards.
+let pluginModalReturnToManage = false;
+
+function closePluginModal() {
+  $('pluginModalOverlay').classList.remove('open');
+  pluginModalChatId = null;
+  if (pluginModalReturnToManage) {
+    pluginModalReturnToManage = false;
+    openManageModal();
+  }
+}
+
+async function openPluginModal(chatId) {
+  pluginModalChatId = chatId || selectedChatId;
+  if (!pluginModalChatId) return;
+  $('pluginModalMsg').textContent = '';
+  $('pluginModalMsg').className = '';
+  $('pluginModalOverlay').classList.add('open');
+  $('pluginOptionsList').innerHTML = 'Loading…';
+  $('pluginConfigForm').style.display = 'none';
+
+  try {
+    if (!availablePlugins.length) {
+      const body = await api('/plugins');
+      availablePlugins = body.plugins;
+    }
+    const assignmentBody = await api('/conversations/' + encodeURIComponent(pluginModalChatId) + '/plugin');
+    const assignment = assignmentBody.assignment;
+    selectedPluginId = assignment ? assignment.pluginId : null;
+    currentPluginConfig = assignment ? assignment.config || {} : {};
+    renderPluginOptions();
+    const plugin = availablePlugins.find((p) => p.id === selectedPluginId);
+    if (plugin && plugin.configJsonSchema) {
+      renderPluginConfigForm(plugin.configJsonSchema, currentPluginConfig);
+    }
+  } catch (err) {
+    $('pluginOptionsList').innerHTML = '';
+    $('pluginModalMsg').className = 'err';
+    $('pluginModalMsg').textContent = 'Failed to load plugins: ' + err.message;
+  }
+}
+
+async function savePluginSelection() {
+  if (!pluginModalChatId) return;
+  $('pluginSaveBtn').disabled = true;
+  $('pluginModalMsg').textContent = '';
+  $('pluginModalMsg').className = '';
+  try {
+    if (!selectedPluginId) {
+      await api('/conversations/' + encodeURIComponent(pluginModalChatId) + '/plugin', { method: 'DELETE' });
+    } else {
+      const plugin = availablePlugins.find((p) => p.id === selectedPluginId);
+      const config = plugin && plugin.configJsonSchema ? readPluginConfigForm(plugin.configJsonSchema) : undefined;
+      await api('/conversations/' + encodeURIComponent(pluginModalChatId) + '/plugin', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pluginId: selectedPluginId, config }),
+      });
+    }
+    closePluginModal();
+    loadConversations();
+  } catch (err) {
+    $('pluginModalMsg').className = 'err';
+    $('pluginModalMsg').textContent = err.message;
+  } finally {
+    $('pluginSaveBtn').disabled = false;
+  }
+}
+
+$('pluginBtn').addEventListener('click', () => openPluginModal(selectedChatId));
+$('pluginCancelBtn').addEventListener('click', closePluginModal);
+$('pluginSaveBtn').addEventListener('click', savePluginSelection);
+$('pluginModalOverlay').addEventListener('click', (e) => {
+  if (e.target === $('pluginModalOverlay')) closePluginModal();
+});
+
+// ---------- Plugin management screen ----------
+function manageRowLabel(a) {
+  return (a.isGroup ? '👥 ' : '') + (a.name || conversationLabel(a.chatJid, a.isGroup));
+}
+
+function renderManageList(assignments) {
+  const el = $('manageList');
+  if (!assignments.length) {
+    el.innerHTML = '<div id="manageEmpty">No conversations have a plugin attached yet.</div>';
+    return;
+  }
+  el.innerHTML = assignments
+    .map(
+      (a, i) => `
+    <div class="manage-row" data-jid="${a.chatJid.replace(/"/g, '&quot;')}">
+      <div class="manage-info">
+        <div class="manage-name">${manageRowLabel(a).replace(/</g, '&lt;')}</div>
+        <div class="manage-plugin">${(a.pluginName || a.pluginId).replace(/</g, '&lt;')}</div>
+      </div>
+      <label class="toggle-switch" title="${a.enabled ? 'Enabled' : 'Disabled'}">
+        <input type="checkbox" class="manage-toggle" data-index="${i}" ${a.enabled ? 'checked' : ''} />
+        <span class="slider"></span>
+      </label>
+      <div class="manage-actions">
+        <button class="manage-edit" data-index="${i}">Edit</button>
+        <button class="manage-remove danger" data-index="${i}">Remove</button>
+      </div>
+    </div>`,
+    )
+    .join('');
+
+  el.querySelectorAll('.manage-toggle').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const a = assignments[Number(input.dataset.index)];
+      input.disabled = true;
+      try {
+        await api('/conversations/' + encodeURIComponent(a.chatJid) + '/plugin', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: input.checked }),
+        });
+        a.enabled = input.checked;
+        loadConversations();
+      } catch (err) {
+        input.checked = !input.checked;
+        alert('Failed to update: ' + err.message);
+      } finally {
+        input.disabled = false;
+      }
+    });
+  });
+
+  el.querySelectorAll('.manage-edit').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const a = assignments[Number(btn.dataset.index)];
+      closeManageModal();
+      pluginModalReturnToManage = true;
+      openPluginModal(a.chatJid);
+    });
+  });
+
+  el.querySelectorAll('.manage-remove').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const a = assignments[Number(btn.dataset.index)];
+      if (!confirm('Remove the plugin from "' + manageRowLabel(a) + '"?')) return;
+      try {
+        await api('/conversations/' + encodeURIComponent(a.chatJid) + '/plugin', { method: 'DELETE' });
+        loadConversations();
+        loadManageList();
+      } catch (err) {
+        alert('Failed to remove: ' + err.message);
+      }
+    });
+  });
+}
+
+async function loadManageList() {
+  $('manageList').innerHTML = 'Loading…';
+  try {
+    const body = await api('/plugins/assignments');
+    renderManageList(body.assignments);
+  } catch (err) {
+    $('manageList').innerHTML = '<div id="manageEmpty">Failed to load: ' + err.message + '</div>';
+  }
+}
+
+function openManageModal() {
+  $('manageModalOverlay').classList.add('open');
+  loadManageList();
+}
+
+function closeManageModal() {
+  $('manageModalOverlay').classList.remove('open');
+}
+
+$('manageBtn').addEventListener('click', openManageModal);
+$('manageCloseBtn').addEventListener('click', closeManageModal);
+$('manageModalOverlay').addEventListener('click', (e) => {
+  if (e.target === $('manageModalOverlay')) closeManageModal();
 });
 
 pollStatus();

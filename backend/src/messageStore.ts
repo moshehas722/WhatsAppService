@@ -149,6 +149,58 @@ export function flushContacts(): void {
   }
 }
 
+// WhatsApp can re-address the same real conversation under a different JID
+// over time (see jidAliases.ts — @lid vs phone-number identity). When that's
+// discovered, fold whatever accumulated under the old JID into the canonical
+// one — messages, and the contact name — so the conversation stays one entry
+// instead of silently splitting into two.
+export function mergeChatsForIdentity(fromJid: string, toJid: string): void {
+  if (fromJid === toJid) return;
+
+  const fromChat = messagesByChat.get(fromJid);
+  if (fromChat && fromChat.size > 0) {
+    let toChat = messagesByChat.get(toJid);
+    if (!toChat) {
+      toChat = new Map();
+      messagesByChat.set(toJid, toChat);
+    }
+    for (const [key, msg] of fromChat) {
+      toChat.set(key, { ...msg, chatJid: toJid });
+    }
+    if (toChat.size > MAX_MESSAGES_PER_CHAT) {
+      const oldestFirst = sortedByTime(toChat);
+      for (const stale of oldestFirst.slice(0, toChat.size - MAX_MESSAGES_PER_CHAT)) {
+        toChat.delete(messageKey(stale));
+      }
+    }
+    dirtyChats.add(toJid);
+  }
+
+  if (messagesByChat.delete(fromJid)) {
+    dirtyChats.delete(fromJid);
+    try {
+      const oldFile = fileForChat(fromJid);
+      if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
+    } catch (err) {
+      console.error(`[messageStore] failed to remove merged-away chat file for ${fromJid}:`, err);
+    }
+  }
+
+  if (!contactNames.has(toJid)) {
+    const fromName = contactNames.get(fromJid);
+    if (fromName) {
+      contactNames.set(toJid, fromName);
+      contactsDirty = true;
+    }
+  }
+  contactNames.delete(fromJid);
+
+  flushDirty();
+  flushContacts();
+
+  console.error(`[messageStore] merged conversation ${fromJid} -> ${toJid} (identity resolved)`);
+}
+
 export interface ConversationSummary {
   chatJid: string;
   count: number;

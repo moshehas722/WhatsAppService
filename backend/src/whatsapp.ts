@@ -26,9 +26,12 @@ import {
   listConversations as listStoredConversations,
   loadPersistedContacts,
   loadPersistedMessages,
+  mergeChatsForIdentity,
   setContactName,
   StoredMessage,
 } from './messageStore';
+import * as pluginManager from './plugins/manager';
+import { canonicalizeJid, loadPersistedJidAliases, pickCanonicalJid, recordAlias } from './jidAliases';
 
 export type ConnectionState = 'connecting' | 'qr_pending' | 'connected' | 'disconnected';
 
@@ -47,6 +50,8 @@ function log(...args: unknown[]) {
 // conversation history survives a restart.
 loadPersistedMessages();
 loadPersistedContacts();
+pluginManager.loadPluginAssignments();
+loadPersistedJidAliases();
 
 let sock: WASocket | undefined;
 let state: ConnectionState = 'connecting';
@@ -124,18 +129,50 @@ function extractText(message: proto.IMessage | null | undefined): string {
   }
 }
 
+// Records a newly-observed lid<->phone-number pairing and, if it's genuinely
+// new, immediately folds whatever was stored under the non-canonical JID
+// into the canonical one — see messageStore.mergeChatsForIdentity.
+function learnIdentityAlias(a: string | undefined, b: string | undefined): void {
+  if (!a || !b || a === b) return;
+  if (!recordAlias(a, b)) return; // already known — nothing to merge
+  const canonical = pickCanonicalJid(a, b);
+  const other = canonical === a ? b : a;
+  mergeChatsForIdentity(other, canonical);
+}
+
 function storeIncomingMessages(messages: WAMessage[], source: string) {
   let stored = 0;
   let contactsChanged = false;
+  // Chats that received a live (not history-backfilled), not-from-me message
+  // in this batch — the only messages that should ever trigger a plugin.
+  const liveTriggerChats = new Set<string>();
   for (const msg of messages) {
     const chatJid = msg.key.remoteJid;
     if (!msg.message || !chatJid) continue;
+
+    // protocolMessage carries WhatsApp housekeeping (deletions, ephemeral-timer
+    // changes, device sync) rather than chat content — never store it, so it
+    // can't show up as a conversation's last-message preview or in the thread.
+    const normalized = normalizeMessageContent(msg.message);
+    if (normalized && getContentType(normalized) === 'protocolMessage') continue;
+
+    // In a 1:1 chat (no participant — that's group-only), chatJid IS the
+    // other party's identity, and WhatsApp sometimes includes both their
+    // @lid and phone-number forms on the same message key.
+    if (!msg.key.participant) {
+      if (chatJid.endsWith('@lid') && msg.key.senderPn) learnIdentityAlias(chatJid, msg.key.senderPn);
+      else if (chatJid.endsWith('@s.whatsapp.net') && msg.key.senderLid) learnIdentityAlias(chatJid, msg.key.senderLid);
+    }
+    // Route every write through the canonical identity so a conversation
+    // never splits across a chat's @lid and phone-number forms.
+    const canonicalChatJid = canonicalizeJid(chatJid);
+
     const timestamp =
       typeof msg.messageTimestamp === 'number' ? msg.messageTimestamp : Number(msg.messageTimestamp ?? 0);
-    const sender = msg.key.participant ?? chatJid;
+    const sender = canonicalizeJid(msg.key.participant ?? canonicalChatJid);
     const record: StoredMessage = {
       id: msg.key.id ?? '',
-      chatJid,
+      chatJid: canonicalChatJid,
       fromMe: !!msg.key.fromMe,
       sender,
       timestamp,
@@ -143,6 +180,10 @@ function storeIncomingMessages(messages: WAMessage[], source: string) {
     };
     addMessage(record);
     stored += 1;
+
+    if (source === 'messages.upsert' && !record.fromMe) {
+      liveTriggerChats.add(canonicalChatJid);
+    }
 
     // pushName is the display name the sender's own device reports — not as
     // reliable as a saved contact name (see contacts.upsert/update below),
@@ -155,6 +196,31 @@ function storeIncomingMessages(messages: WAMessage[], source: string) {
     log(`[whatsapp] ${source}: stored ${stored} message(s)`);
   }
   if (contactsChanged) flushContacts();
+
+  if (liveTriggerChats.size > 0) {
+    // Not awaited: a slow/misbehaving plugin must never block message
+    // storage or the Baileys event loop.
+    void triggerPlugins(liveTriggerChats).catch((err) => log('[whatsapp] triggerPlugins failed:', err));
+  }
+}
+
+// Dispatches once per distinct chat (not per message) so a burst of several
+// live messages for the same chat produces at most one plugin run against
+// the fully-updated post-batch history, instead of duplicate/racy replies.
+async function triggerPlugins(chatJids: Set<string>): Promise<void> {
+  for (const chatJid of chatJids) {
+    if (!pluginManager.isActive(chatJid)) continue;
+    try {
+      const history = getConversationMessages(chatJid, pluginManager.PLUGIN_HISTORY_LIMIT);
+      if (history.length === 0) continue;
+      const reply = await pluginManager.runAssignedPlugin(chatJid, history);
+      if (reply) {
+        await sendMessage(chatJid, reply);
+      }
+    } catch (err) {
+      log(`[whatsapp] plugin dispatch failed for chat ${chatJid}:`, err);
+    }
+  }
 }
 
 export async function connectToWhatsApp(): Promise<void> {
@@ -186,7 +252,8 @@ export async function connectToWhatsApp(): Promise<void> {
   sock.ev.on('contacts.upsert', (contacts) => {
     let changed = false;
     for (const c of contacts) {
-      if (setContactName(c.id, c.name || c.notify)) changed = true;
+      if (c.lid && c.jid) learnIdentityAlias(c.lid, c.jid);
+      if (setContactName(canonicalizeJid(c.id), c.name || c.notify)) changed = true;
     }
     if (changed) flushContacts();
   });
@@ -194,9 +261,16 @@ export async function connectToWhatsApp(): Promise<void> {
   sock.ev.on('contacts.update', (updates) => {
     let changed = false;
     for (const u of updates) {
-      if (u.id && setContactName(u.id, u.name || u.notify)) changed = true;
+      if (u.lid && u.jid) learnIdentityAlias(u.lid, u.jid);
+      if (u.id && setContactName(canonicalizeJid(u.id), u.name || u.notify)) changed = true;
     }
     if (changed) flushContacts();
+  });
+
+  // Fired when WhatsApp explicitly resolves a @lid chat to the underlying
+  // phone number — the clearest possible signal for the alias map.
+  sock.ev.on('chats.phoneNumberShare', ({ lid, jid }) => {
+    learnIdentityAlias(lid, jid);
   });
 
   sock.ev.on('connection.update', (update) => {
@@ -272,7 +346,7 @@ export function toJid(to: string): string {
  */
 export function normalizeChatId(to: string): string {
   const trimmed = to.trim();
-  return trimmed.includes('@') ? trimmed : toJid(trimmed);
+  return canonicalizeJid(trimmed.includes('@') ? trimmed : toJid(trimmed));
 }
 
 export interface GroupSummary {
@@ -302,14 +376,46 @@ export function getConversationMessages(to: string, limit = 50): ConversationMes
 export interface ConversationListItem extends ConversationSummary {
   isGroup: boolean;
   name?: string;
+  pluginId?: string;
+  pluginEnabled?: boolean;
 }
 
 // Purely local — reads from the persisted store, no WhatsApp connection needed.
 export function listConversations(): ConversationListItem[] {
-  return listStoredConversations().map((c) => ({
-    ...c,
-    isGroup: c.chatJid.endsWith('@g.us'),
-    name: getContactName(c.chatJid),
+  return listStoredConversations().map((c) => {
+    const assignment = pluginManager.getAssignment(c.chatJid);
+    return {
+      ...c,
+      isGroup: c.chatJid.endsWith('@g.us'),
+      name: getContactName(c.chatJid),
+      pluginId: assignment?.pluginId,
+      pluginEnabled: assignment?.enabled,
+    };
+  });
+}
+
+export interface ConversationPluginAssignment {
+  chatJid: string;
+  isGroup: boolean;
+  name?: string;
+  pluginId: string;
+  pluginName?: string;
+  enabled: boolean;
+  config: unknown;
+}
+
+// For the plugin-management screen: every conversation that currently has a
+// plugin attached, regardless of message-history state, decorated with the
+// same display name/isGroup convention used elsewhere.
+export function listPluginAssignments(): ConversationPluginAssignment[] {
+  return pluginManager.listAssignments().map((a) => ({
+    chatJid: a.chatJid,
+    isGroup: a.chatJid.endsWith('@g.us'),
+    name: getContactName(a.chatJid),
+    pluginId: a.pluginId,
+    pluginName: a.pluginName,
+    enabled: a.enabled,
+    config: a.config,
   }));
 }
 
