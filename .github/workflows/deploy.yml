@@ -13,5 +13,11 @@ jobs:
           clean: false # actions/checkout defaults to `git clean -ffdx`, which would wipe
                        # auth_info/ (WhatsApp session + TLS cert) and .env since they're gitignored
 
+      - name: Ensure plugin network exists
+        # whatapp-agent-net is external (not owned by this compose project) so
+        # separate plugin projects can join it independently — see README.md.
+        # Idempotent: no-op if it already exists.
+        run: docker network create whatapp-agent-net 2>/dev/null || true
+
       - name: Build and restart
         run: docker compose -f deploy/docker/docker-compose.yml up -d --build
