@@ -105,6 +105,18 @@ apiRouter.get('/plugins/registrations', (_req, res) => {
   res.json({ count: registrations.length, registrations });
 });
 
+// Admin removal from the management UI — no secret required (unlike the
+// plugin's own self-service DELETE /plugins/register), since this is a
+// local-admin action against a registration the admin can already see.
+apiRouter.delete('/plugins/registrations/:pluginId', (req, res) => {
+  const { pluginId } = req.params;
+  if (!remoteRegistry.adminRemove(pluginId)) {
+    res.status(404).json({ error: `No registration found for pluginId "${pluginId}".` });
+    return;
+  }
+  res.json({ success: true });
+});
+
 apiRouter.get('/conversations/:to/plugin', (req, res) => {
   const { to } = req.params;
   try {

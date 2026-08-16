@@ -115,6 +115,18 @@ export function unregister(pluginId: string, secret: string): boolean {
   return true;
 }
 
+// Admin-initiated removal (e.g. from the management UI) — unlike unregister(),
+// doesn't require the plugin's own secret, since this is a local-admin action
+// rather than the plugin self-deregistering. Conversation assignments that
+// referenced this pluginId are left as-is; they already degrade gracefully
+// (see manager.getAssignment's pluginFound flag) rather than needing a cascade.
+export function adminRemove(pluginId: string): boolean {
+  if (!registrations.has(pluginId)) return false;
+  registrations.delete(pluginId);
+  persist();
+  return true;
+}
+
 const HEARTBEAT_STALE_MS = Number(process.env.PLUGIN_HEARTBEAT_STALE_MS) || 90_000;
 
 export function isHealthy(registration: RemotePluginRegistration): boolean {

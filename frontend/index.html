@@ -226,7 +226,7 @@
   }
   .toggle-switch input:checked + .slider { background: var(--accent); }
   .toggle-switch input:checked + .slider::before { transform: translateX(15px); }
-  #manageEmpty { color: var(--muted); font-size: 13px; text-align: center; padding: 20px 0; }
+  .manage-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 20px 0; }
 
   .messages {
     flex: 1;
@@ -387,8 +387,13 @@
 <div class="modal-overlay" id="manageModalOverlay">
   <div class="modal-panel modal-panel-wide">
     <h3>Plugin management</h3>
-    <div class="modal-hint">Every conversation with a plugin attached — toggle, edit, or remove it here.</div>
+
+    <div class="modal-hint">Registered plugins — remove one to stop it from being assignable (conversations already using it will show "plugin not found").</div>
+    <div id="registrationsList"></div>
+
+    <div class="modal-hint" style="margin-top:16px">Every conversation with a plugin attached — toggle, edit, or remove it here.</div>
     <div id="manageList"></div>
+
     <div class="modal-actions">
       <button id="manageCloseBtn">Close</button>
     </div>
@@ -415,6 +420,7 @@
       <tr><td><span class="method get">GET</span></td><td><code>/plugins</code></td><td class="desc">List available plugins, with their config JSON schema (if any)</td></tr>
       <tr><td><span class="method get">GET</span></td><td><code>/plugins/assignments</code></td><td class="desc">List every conversation that currently has a plugin attached</td></tr>
       <tr><td><span class="method get">GET</span></td><td><code>/plugins/registrations</code></td><td class="desc">List raw remote plugin registrations (id, baseUrl, health) — not just assigned ones</td></tr>
+      <tr><td><span class="method post">DELETE</span></td><td><code>/plugins/registrations/:pluginId</code></td><td class="desc">Admin removal of a plugin registration (no secret needed) — for the management screen</td></tr>
       <tr><td><span class="method post">POST</span></td><td><code>/plugins/register</code></td><td class="desc">Remote plugin self-registration — body <code>{ pluginId, name, description, baseUrl, configJsonSchema }</code>, header <code>X-Plugin-Secret</code> to re-register</td></tr>
       <tr><td><span class="method post">DELETE</span></td><td><code>/plugins/register</code></td><td class="desc">Remote plugin unregisters itself — body <code>{ pluginId }</code>, header <code>X-Plugin-Secret</code></td></tr>
       <tr><td><span class="method post">POST</span></td><td><code>/plugins/heartbeat</code></td><td class="desc">Remote plugin liveness ping — body <code>{ pluginId }</code>, header <code>X-Plugin-Secret</code></td></tr>
@@ -831,10 +837,63 @@ function manageRowLabel(a) {
   return (a.isGroup ? '👥 ' : '') + (a.name || conversationLabel(a.chatJid, a.isGroup));
 }
 
+// Cached from the last loadManageList() call, so the registrations list can
+// tell you how many conversations use a plugin before you remove it.
+let manageAssignmentsCache = [];
+
+function renderRegistrationsList(registrations) {
+  const el = $('registrationsList');
+  if (!registrations.length) {
+    el.innerHTML = '<div class="manage-empty">No plugins registered yet.</div>';
+    return;
+  }
+  el.innerHTML = registrations
+    .map(
+      (r, i) => `
+    <div class="manage-row">
+      <div class="manage-info">
+        <div class="manage-name">${r.name.replace(/</g, '&lt;')}${healthBadgeHtml({ remote: true, healthy: r.healthy, lastSeenAt: r.lastSeenAt })}</div>
+        <div class="manage-plugin">${r.pluginId.replace(/</g, '&lt;')} &middot; ${r.baseUrl.replace(/</g, '&lt;')}</div>
+      </div>
+      <div class="manage-actions">
+        <button class="registration-remove danger" data-index="${i}">Remove</button>
+      </div>
+    </div>`,
+    )
+    .join('');
+
+  el.querySelectorAll('.registration-remove').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const r = registrations[Number(btn.dataset.index)];
+      const usedBy = manageAssignmentsCache.filter((a) => a.pluginId === r.pluginId).length;
+      const usageNote = usedBy ? ` It's currently attached to ${usedBy} conversation(s) — they'll show "plugin not found" afterward.` : '';
+      if (!confirm('Remove plugin "' + r.name + '"?' + usageNote)) return;
+      try {
+        await api('/plugins/registrations/' + encodeURIComponent(r.pluginId), { method: 'DELETE' });
+        loadRegistrationsList();
+        loadManageList();
+        loadConversations();
+      } catch (err) {
+        alert('Failed to remove: ' + err.message);
+      }
+    });
+  });
+}
+
+async function loadRegistrationsList() {
+  $('registrationsList').innerHTML = 'Loading…';
+  try {
+    const body = await api('/plugins/registrations');
+    renderRegistrationsList(body.registrations);
+  } catch (err) {
+    $('registrationsList').innerHTML = '<div class="manage-empty">Failed to load: ' + err.message + '</div>';
+  }
+}
+
 function renderManageList(assignments) {
   const el = $('manageList');
   if (!assignments.length) {
-    el.innerHTML = '<div id="manageEmpty">No conversations have a plugin attached yet.</div>';
+    el.innerHTML = '<div class="manage-empty">No conversations have a plugin attached yet.</div>';
     return;
   }
   el.innerHTML = assignments
@@ -906,14 +965,16 @@ async function loadManageList() {
   $('manageList').innerHTML = 'Loading…';
   try {
     const body = await api('/plugins/assignments');
+    manageAssignmentsCache = body.assignments;
     renderManageList(body.assignments);
   } catch (err) {
-    $('manageList').innerHTML = '<div id="manageEmpty">Failed to load: ' + err.message + '</div>';
+    $('manageList').innerHTML = '<div class="manage-empty">Failed to load: ' + err.message + '</div>';
   }
 }
 
 function openManageModal() {
   $('manageModalOverlay').classList.add('open');
+  loadRegistrationsList();
   loadManageList();
 }
 
