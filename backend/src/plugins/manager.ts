@@ -118,6 +118,11 @@ export async function runAssignedPlugin(chatJid: string, history: PluginMessage[
     config: assignment.config,
   };
 
+  console.log(
+    `[plugins] dispatching to "${plugin.id}" (${healthFields(plugin.id).remote ? 'remote' : 'local'}) for chat ${chatJid}:`,
+    JSON.stringify({ chatJid, pluginId: plugin.id, message: ctx.message, historyLength: history.length, config: ctx.config }),
+  );
+
   try {
     const result = await plugin.onMessage(ctx);
     return typeof result === 'string' && result.trim() ? result : undefined;

@@ -24,7 +24,15 @@ const mcpMethodNotAllowed = (_req: Request, res: Response) => {
   res.status(405).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null });
 };
 
+// Polled on a fixed interval by the UI (or a remote plugin's heartbeat) —
+// logging every hit drowns out everything else, so these are exempted.
+// Matched on req.path (query-string-free), not req.originalUrl, so it can't
+// accidentally quiet a route that merely shares this prefix, e.g.
+// /conversations/:to/plugin.
+const QUIET_ROUTES = new Set(['GET /status', 'GET /conversations', 'POST /plugins/heartbeat']);
+
 app.use((req: Request, res: Response, next: NextFunction) => {
+  if (QUIET_ROUTES.has(`${req.method} ${req.path}`)) return next();
   const start = Date.now();
   console.log(`[req] ${req.method} ${req.originalUrl} origin=${req.headers.origin ?? 'none'}`);
   res.on('finish', () => {
