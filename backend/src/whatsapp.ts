@@ -143,8 +143,9 @@ function learnIdentityAlias(a: string | undefined, b: string | undefined): void 
 function storeIncomingMessages(messages: WAMessage[], source: string) {
   let stored = 0;
   let contactsChanged = false;
-  // Chats that received a live (not history-backfilled), not-from-me message
-  // in this batch — the only messages that should ever trigger a plugin.
+  // Chats that received a live (not history-backfilled) message in this batch
+  // that should trigger a plugin: normally that means not-from-me, but a
+  // `%%`-prefixed fromMe message also qualifies (see below).
   const liveTriggerChats = new Set<string>();
   for (const msg of messages) {
     const chatJid = msg.key.remoteJid;
@@ -181,7 +182,11 @@ function storeIncomingMessages(messages: WAMessage[], source: string) {
     addMessage(record);
     stored += 1;
 
-    if (source === 'messages.upsert' && !record.fromMe) {
+    // A fromMe message is normally never a trigger (see comment on
+    // liveTriggerChats above), but a `%%`-prefixed one is an explicit
+    // self-issued command — useful for exercising a plugin in a self-chat,
+    // where every message is fromMe and there's no other party to trigger it.
+    if (source === 'messages.upsert' && (!record.fromMe || record.text.startsWith('%%'))) {
       liveTriggerChats.add(canonicalChatJid);
     }
 
