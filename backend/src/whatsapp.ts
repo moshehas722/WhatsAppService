@@ -97,7 +97,14 @@ export async function getQrImage(): Promise<Buffer | undefined> {
 }
 
 function extractText(message: proto.IMessage | null | undefined): string {
-  const normalized = message ? normalizeMessageContent(message) : undefined;
+  let normalized = message ? normalizeMessageContent(message) : undefined;
+  // Baileys' own normalizeMessageContent only unwraps a fixed set of
+  // FutureProofMessage envelopes (ephemeral, view-once, edited, ...) —
+  // groupMentionedMessage is the same shape but isn't in that list, so it
+  // has to be unwrapped here to reach the real content underneath.
+  if (normalized?.groupMentionedMessage?.message) {
+    normalized = normalizeMessageContent(normalized.groupMentionedMessage.message);
+  }
   if (!normalized) return '';
   const type = getContentType(normalized);
 
